@@ -1,0 +1,132 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Donor {
+  id              String           @id @default(uuid())
+  donorCode       String           @unique // e.g. DNR-1001
+  fullName        String
+  phone           String           @unique
+  phoneSecondary  String?
+  address         String?          // عنوان السكن / العمل للمحصل والمندوب
+  dept            String?          // القسم / الكلية / المنطقة
+  academicYear    String?
+  status          String           @default("active") // active, paused, cancelled
+  committedAmount Float            @default(500)
+  preferredMethod String           @default("cash_office") // cash_office, collector_visit, instapay_manual, vodafone_cash, bank_transfer
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  cycles    DonationCycle[]
+  vouchers  ReceiptVoucher[]
+  followups FollowupLog[]
+
+  @@map("donors")
+}
+
+model Campaign {
+  id                  String           @id @default(uuid())
+  slug                String           @unique
+  title               String
+  description         String?
+  campaignTotalTarget Float            @default(0)
+  currentAmount       Float            @default(0)
+  donationType        String           @default("recurring") // recurring, one_time
+  whatsappTemplate    String?
+  isActive            Boolean          @default(true)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  cycles   DonationCycle[]
+  vouchers ReceiptVoucher[]
+
+  @@map("campaigns")
+}
+
+model DonationCycle {
+  id                  String           @id @default(uuid())
+  donorId             String
+  campaignId          String
+  cycleMonth          String           // e.g. "2026-08"
+  cycleExpectedAmount Float
+  paidAmount          Float            @default(0)
+  status              String           @default("pending") // pending, partially_paid, paid, postponed, skipped, needs_followup
+  postponeCount       Int              @default(0)
+  postponedUntil      DateTime?
+  skipCount           Int              @default(0)
+  notes               String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  donor     Donor            @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  campaign  Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  vouchers  ReceiptVoucher[]
+  followups FollowupLog[]
+
+  @@index([donorId])
+  @@index([campaignId])
+  @@index([status])
+  @@map("donation_cycles")
+}
+
+model ReceiptVoucher {
+  id            String         @id @default(uuid())
+  voucherNumber String         @unique // e.g. REC-2026-1001
+  cycleId       String?
+  donorId       String
+  campaignId    String
+  amount        Float
+  paymentMethod String         @default("cash") // cash, collector, instapay, vodafone_cash, bank_transfer
+  collectorName String?        // اسم المندوب أو المحصل
+  receivedBy    String         @default("أمين الصندوق") // اسم الموظف المستلم
+  receiptDate   DateTime       @default(now())
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  donor    Donor          @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  cycle    DonationCycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  campaign Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([donorId])
+  @@index([cycleId])
+  @@index([campaignId])
+  @@map("receipt_vouchers")
+}
+
+model FollowupLog {
+  id          String         @id @default(uuid())
+  donorId     String
+  cycleId     String?
+  contactType String         @default("whatsapp") // whatsapp, phone_call, field_visit, sms
+  outcome     String         @default("contacted_ok") // promised_to_pay, postponed, skipped, unreachable, contacted_ok
+  notes       String?
+  contactedBy String         @default("مسؤول المتابعة")
+  contactedAt DateTime       @default(now())
+
+  donor Donor          @relation(fields: [donorId], references: [id], onDelete: Cascade)
+  cycle DonationCycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+
+  @@index([donorId])
+  @@index([cycleId])
+  @@map("followup_logs")
+}
+
+model StaffUser {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  fullName  String
+  role      String   @default("staff") // admin, treasurer, collector, staff
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("staff_users")
+}
